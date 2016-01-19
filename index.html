@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<script type="text/javascript" src="json/hop_counts.json"></script>
+		<script type="text/javascript" src="json/hop_pair.json"></script>
+		<script type="text/javascript" src="lib/d3.min.js"></script>
+		<script type="text/javascript" src="lib/svg-pan-zoom.min.js"></script>
+	</head>
+	<body>
+		<svg id="viz"></svg>
+		<div class="details">
+			<h2 id="hopname"></h2>
+		</div>
+		<script>
+			// Use as base space size
+			var unit = 50;
+			var width = 800; height = 500;
+			var hops = [];
+			for (var hop in counts) {
+				if (!counts.hasOwnProperty(hop)) {
+					continue;
+				}
+
+				var pairings = [];
+				for (var h in pairs[hop]) {
+					if (!pairs[hop].hasOwnProperty(h)) {
+						continue;
+					}
+					pairings.push(h);
+				}
+
+				pairings = pairings.sort(function(a, b) {
+					return pairs[hop][b] - pairs[hop][a];
+				});
+
+				hops.push({
+					"name": hop,
+					"uses": counts[hop],
+					"raw_pairings": pairs[hop],
+					"pairings": pairings
+				});
+			}
+
+			hops.sort(function(a, b) { return b.uses - a.uses; });
+
+			var colormap = []
+			var hue = 136, sat = 100, light = 42;
+			var pct = 0;
+			var tmpsat, tmplight;
+			var minsat = 42, maxlight = 80;
+
+			// Use the max count as the upper end of the colormap
+			for (var i = 0; i <= hops[0].uses; i++) {
+				pct = i / hops[0].uses;
+				tmpsat = minsat + (sat - minsat) * pct;
+				tmplight = maxlight - (maxlight - light) * pct;
+				colormap.push("hsl(" + hue + ", " + tmpsat + "%, " + tmplight + "%)");
+			}
+
+			// Determine cx, cy, r, and (eventually) color
+			var hop_attrs = hops.map(function(hop, index) {
+				var cx, cy, r, color;
+				// Position is derived from index and pairings
+				r = unit / 2;
+				var num_cols = width / unit;
+				var num_rows = height / unit;
+
+				var col = index % num_cols;
+				var row = Math.floor(index / num_cols);
+
+				cx = col * unit + r;
+				cy = row * unit + r;
+				color = colormap[hop.uses];
+
+				return {
+					"name": hop.name,
+					"pairings": hop.pairings,
+					"raw_pairings": hop.raw_pairings,
+					"uses": hop.uses,
+					"cx": cx,
+					"cy": cy,
+					"r": r,
+					"color": color
+				}
+			});
+
+			var svg = d3.select("body").select("svg").attr('width', width).attr("height", height);
+			var circles = svg.selectAll("circle")
+			   .data(hop_attrs)
+			   .enter()
+			   .append("circle");
+			
+			var filter = null;
+
+			function filterhops(hop) {
+				var unused, unused, target;
+
+				// Determine which hops to keep and which to shove off to the sides
+				if (filter === hop.name) {
+					filter = null;
+					used = circles;
+					unused = d3.selectAll([]);
+					target = d3.selectAll([]);
+				} else {
+					filter = hop.name;
+					unused = circles.filter(function(el) { return el.name !== hop.name && hop.pairings.indexOf(el.name) === -1; });
+					used = circles.filter(function(el) { return hop.pairings.indexOf(el.name) !== -1; });
+					target = circles.filter(function(el) { return el.name == hop.name; });
+				}
+
+				unused.transition()
+				      .attr("cx", function(d, i) { if (i < unused.size() / 2) { return d.r * .75; } else { return width - d.r * .75; } })
+				      .attr("cy", function(d, i) { if (i < unused.size() / 2) { return (d.r * .75) * i;} else { return d.r * .75 * (i - unused.size() / 2)} })
+				      .attr("r", function(d) { return d.r * .75; })
+				      .attr("stroke-width", 2);
+
+				target.transition()
+				      .attr("cx", width / 2)
+				      .attr("cy", height / 2)
+				      .attr("stroke-width", 4)
+				      .attr("r", hop.r);
+
+				function distance(datum) {
+					// Distance will be a function of the frequency of the pairing from each hop's POV
+					var datum_to_hop = 50, hop_to_datum = 200;
+
+					// Rank of hop a in hop b's pairings
+					var hop_index = datum.pairings.indexOf(hop.name);
+					datum_to_hop = datum_to_hop - datum_to_hop * hop_index / datum.pairings.length;
+					var datum_index = hop.pairings.indexOf(datum.name);
+					hop_to_datum = hop_to_datum - hop_to_datum * datum_index / hop.pairings.length;
+
+					return datum_to_hop + hop_to_datum;
+				}
+
+				if (filter !== null) {
+
+					used.transition()
+					    .attr("cx", function(d, i) {
+					    	var theta = i * 2 * Math.PI / hop.pairings.length;
+					    	return distance(d) * Math.cos(theta) + width / 2;
+					    })
+					    .attr("cy", function(d, i) {
+					    	var theta = i * 2 * Math.PI / hop.pairings.length;
+					    	return distance(d) * Math.sin(theta) + height / 2;
+					    })
+					    .attr("r", function(d, i) { return d.r})
+					    .attr("stroke-width", 2);
+				} else {
+					// Reset circles to base position
+					used.transition()
+						.attr("cx", function(d) { return d.cx; })
+						.attr("cy", function(d) { return d.cy; })
+						.attr("r", function(d) { return d.r; })
+						.attr('stroke-width', 2);
+				}
+
+			}
+
+			var circle_attrs = circles.attr("cx", function(d) { return d.cx; })
+									  .attr("cy", function(d) { return d.cy; })
+									  .attr("r", function(d) { return d.r; })
+									  .attr("fill", function(d) { return d.color; })
+									  .attr('stroke', "#008523")
+									  .attr("stroke-width", 2)
+									  .on("click", function(d, i) {
+									  	filterhops(d);
+									  })
+									  .on("mouseover", function(d, i) {
+										d3.select(this).transition().attr("r", 1.1 * d.r);
+										d3.select("#hopname").text(d.name);
+									  })
+									  .on("mouseout", function(d, i) {
+									  	d3.select(this).transition().attr("r", d.r);
+									  });
+
+		</script>
+	</body>
+</html>
