@@ -12,6 +12,15 @@
 			<h2 id="hopname"></h2>
 		</div>
 		<script>
+			function variance(l) {
+				function mean(l) {
+					return l.reduce(function(previous, current) { return previous + current; }, 0) / l.length;
+				}
+				var l_mean = mean(l);
+				var square_diff = l.map(function(d) { return Math.pow(d - l_mean, 2); });
+				return mean(square_diff);
+			}
+
 			// Use as base space size
 			var unit = 50;
 			var width = 800; height = 500;
@@ -93,7 +102,7 @@
 			var filter = null;
 
 			function filterhops(hop) {
-				var unused, unused, target;
+				var unused, unused, target, orbitals;
 
 				// Determine which hops to keep and which to shove off to the sides
 				if (filter === hop.name) {
@@ -120,28 +129,31 @@
 				      .attr("stroke-width", 4)
 				      .attr("r", hop.r);
 
+				// Establish size of angle increments
+				var num_orbitals = Math.ceil(Math.log(hop.pairings.length) / Math.log(5));
+				var delta_theta = Math.PI * 2 / (hop.pairings.length / num_orbitals);
+				var max_jitter = Math.PI / 6;
+				var min_distance = 2 * hop.r;
+				var max_distance = Math.min(width - hop_attrs[0].r * 4, height) / 2;
+
+				function index_distance(datum) {
+					var dist = max_distance * (hop.pairings.indexOf(datum.name) / hop.pairings.length)
+					return Math.max(min_distance, dist);
+				}
+
 				function distance(datum) {
-					// Distance will be a function of the frequency of the pairing from each hop's POV
-					var datum_to_hop = 50, hop_to_datum = 200;
-
-					// Rank of hop a in hop b's pairings
-					var hop_index = datum.pairings.indexOf(hop.name);
-					datum_to_hop = datum_to_hop - datum_to_hop * hop_index / datum.pairings.length;
-					var datum_index = hop.pairings.indexOf(datum.name);
-					hop_to_datum = hop_to_datum - hop_to_datum * datum_index / hop.pairings.length;
-
-					return datum_to_hop + hop_to_datum;
+					return index_distance(datum);
 				}
 
 				if (filter !== null) {
 
 					used.transition()
 					    .attr("cx", function(d, i) {
-					    	var theta = i * 2 * Math.PI / hop.pairings.length;
+					    	var theta = i * delta_theta + Math.random() * max_jitter;
 					    	return distance(d) * Math.cos(theta) + width / 2;
 					    })
 					    .attr("cy", function(d, i) {
-					    	var theta = i * 2 * Math.PI / hop.pairings.length;
+					    	var theta = i * delta_theta + Math.random() * max_jitter;
 					    	return distance(d) * Math.sin(theta) + height / 2;
 					    })
 					    .attr("r", function(d, i) { return d.r})
