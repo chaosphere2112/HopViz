@@ -25,6 +25,7 @@
 			var unit = 50;
 			var width = 800; height = 500;
 			var hops = [];
+
 			for (var hop in counts) {
 				if (!counts.hasOwnProperty(hop)) {
 					continue;
@@ -133,28 +134,40 @@
 				var num_orbitals = Math.ceil(Math.log(hop.pairings.length) / Math.log(5));
 				var delta_theta = Math.PI * 2 / (hop.pairings.length / num_orbitals);
 				var max_jitter = Math.PI / 6;
-				var min_distance = 2 * hop.r;
-				var max_distance = Math.min(width - hop_attrs[0].r * 4, height) / 2;
+				var min_distance = 2 * hop.r + 20;
+				var max_distance = (Math.min(width - hop_attrs[0].r * 4, height) - 100) / 2;
+				
+				var thetas = [];
+				// log base 2 of all pairings
+				var log_distances = hop.pairings.map(function(d) {
+					var freq = hop.raw_pairings[d];
+					return Math.log(freq) / Math.log(3);
+				});
 
-				function index_distance(datum) {
-					var dist = max_distance * (hop.pairings.indexOf(datum.name) / hop.pairings.length)
-					return Math.max(min_distance, dist);
-				}
+				// now we can calculate the pct
+				var distances = log_distances.map(function(d){
+					if (log_distances[0] > 0) {
+						var dist = Math.max(max_distance - max_distance * d / log_distances[0], min_distance);
+						return dist;
+					} else {
+						return max_distance;
+					}
+				});
 
-				function distance(datum) {
-					return index_distance(datum);
-				}
-
+				hop.pairings.reduce(function(previous, current) {
+					var theta = Math.random() * max_jitter + delta_theta + previous;
+					thetas.push(theta);
+					return theta;
+				}, 0);
+				
 				if (filter !== null) {
-
 					used.transition()
 					    .attr("cx", function(d, i) {
-					    	var theta = i * delta_theta + Math.random() * max_jitter;
-					    	return distance(d) * Math.cos(theta) + width / 2;
+					    	return distances[i] * Math.cos(thetas[i]) + width / 2;
 					    })
 					    .attr("cy", function(d, i) {
-					    	var theta = i * delta_theta + Math.random() * max_jitter;
-					    	return distance(d) * Math.sin(theta) + height / 2;
+					    	var theta = thetas[i];
+					    	return distances[i] * Math.sin(thetas[i]) + height / 2;
 					    })
 					    .attr("r", function(d, i) { return d.r})
 					    .attr("stroke-width", 2);
