@@ -58,20 +58,23 @@
 			var pct = 0;
 			var tmpsat, tmplight;
 			var minsat = 42, maxlight = 80;
-
+			var minsize = unit / 4, maxsize = unit / 2;
+			var sizemap = [];
 			// Use the max count as the upper end of the colormap
 			for (var i = 0; i <= hops[0].uses; i++) {
 				pct = i / hops[0].uses;
 				tmpsat = minsat + (sat - minsat) * pct;
 				tmplight = maxlight - (maxlight - light) * pct;
 				colormap.push("hsl(" + hue + ", " + tmpsat + "%, " + tmplight + "%)");
+				sizemap.push(minsize + (maxsize - minsize) * pct);
 			}
 
 			// Determine cx, cy, r, and (eventually) color
 			var hop_attrs = hops.map(function(hop, index) {
-				var cx, cy, r, color;
-				// Position is derived from index and pairings
+				var cx, cy, r;
+
 				r = unit / 2;
+				// Position is derived from index and pairings
 				var num_cols = width / unit;
 				var num_rows = height / unit;
 
@@ -80,7 +83,6 @@
 
 				cx = col * unit + r;
 				cy = row * unit + r;
-				color = colormap[hop.uses];
 
 				return {
 					"name": hop.name,
@@ -89,8 +91,8 @@
 					"uses": hop.uses,
 					"cx": cx,
 					"cy": cy,
-					"r": r,
-					"color": color
+					"r": sizemap[hop.uses],
+					"color": colormap[hop.uses]
 				}
 			});
 
@@ -103,7 +105,7 @@
 			var filter = null;
 
 			function filterhops(hop) {
-				var unused, unused, target, orbitals;
+				var unused, unused, target;
 
 				// Determine which hops to keep and which to shove off to the sides
 				if (filter === hop.name) {
@@ -131,9 +133,8 @@
 				      .attr("r", hop.r);
 
 				// Establish size of angle increments
-				var num_orbitals = Math.ceil(Math.log(hop.pairings.length) / Math.log(5));
-				var delta_theta = Math.PI * 2 / (hop.pairings.length / num_orbitals);
-				var max_jitter = Math.PI / 6;
+				var delta_theta = Math.PI * 2 / (hop.pairings.length / Math.min(hop.pairings.length, 10));
+				var max_jitter = Math.PI / 7;
 				var min_distance = 2 * hop.r + 20;
 				var max_distance = (Math.min(width - hop_attrs[0].r * 4, height) - 100) / 2;
 				
@@ -154,8 +155,8 @@
 					}
 				});
 
-				hop.pairings.reduce(function(previous, current) {
-					var theta = Math.random() * max_jitter + delta_theta + previous;
+				hop.pairings.reduce(function(previous, current, index) {
+					var theta = index % 16 * max_jitter + delta_theta + previous;
 					thetas.push(theta);
 					return theta;
 				}, 0);
