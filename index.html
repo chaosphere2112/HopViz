@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html>
 	<head>
-		<script type="text/javascript" src="json/hop_counts.json"></script>
-		<script type="text/javascript" src="json/hop_pair.json"></script>
+		<script type="text/javascript" src="json/hops.json"></script>
 		<script type="text/javascript" src="lib/d3.min.js"></script>
 		<script type="text/javascript" src="lib/svg-pan-zoom.min.js"></script>
 	</head>
@@ -24,34 +23,9 @@
 			// Use as base space size
 			var unit = 50;
 			var width = 800; height = 500;
-			var hops = [];
+			var hops = hop_data;
 
-			for (var hop in counts) {
-				if (!counts.hasOwnProperty(hop)) {
-					continue;
-				}
-
-				var pairings = [];
-				for (var h in pairs[hop]) {
-					if (!pairs[hop].hasOwnProperty(h)) {
-						continue;
-					}
-					pairings.push(h);
-				}
-
-				pairings = pairings.sort(function(a, b) {
-					return pairs[hop][b] - pairs[hop][a];
-				});
-
-				hops.push({
-					"name": hop,
-					"uses": counts[hop],
-					"raw_pairings": pairs[hop],
-					"pairings": pairings
-				});
-			}
-
-			hops.sort(function(a, b) { return b.uses - a.uses; });
+			hops.sort(function(a, b) { return b.count - a.count; });
 
 			var colormap = []
 			var hue = 136, sat = 100, light = 42;
@@ -61,8 +35,8 @@
 			var minsize = unit / 4, maxsize = unit / 2;
 			var sizemap = [];
 			// Use the max count as the upper end of the colormap
-			for (var i = 0; i <= hops[0].uses; i++) {
-				pct = i / hops[0].uses;
+			for (var i = 0; i <= hops[0].count; i++) {
+				pct = i / hops[0].count;
 				tmpsat = minsat + (sat - minsat) * pct;
 				tmplight = maxlight - (maxlight - light) * pct;
 				colormap.push("hsl(" + hue + ", " + tmpsat + "%, " + tmplight + "%)");
@@ -87,12 +61,11 @@
 				return {
 					"name": hop.name,
 					"pairings": hop.pairings,
-					"raw_pairings": hop.raw_pairings,
-					"uses": hop.uses,
+					"count": hop.count,
 					"cx": cx,
 					"cy": cy,
-					"r": sizemap[hop.uses],
-					"color": colormap[hop.uses]
+					"r": sizemap[hop.count],
+					"color": colormap[hop.count]
 				}
 			});
 
@@ -115,71 +88,48 @@
 					target = d3.selectAll([]);
 				} else {
 					filter = hop.name;
-					unused = circles.filter(function(el) { return el.name !== hop.name && hop.pairings.indexOf(el.name) === -1; });
-					used = circles.filter(function(el) { return hop.pairings.indexOf(el.name) !== -1; });
+					unused = circles.filter(function(el) { return el.name !== hop.name && hop.pairings.hasOwnProperty(el.name) === false; });
+					used = circles.filter(function(el) {
+						return hop.pairings.hasOwnProperty(el.name);
+					});
 					target = circles.filter(function(el) { return el.name == hop.name; });
 				}
 
 				unused.transition()
-				      .attr("cx", function(d, i) { if (i < unused.size() / 2) { return d.r * .75; } else { return width - d.r * .75; } })
-				      .attr("cy", function(d, i) { if (i < unused.size() / 2) { return (d.r * .75) * i;} else { return d.r * .75 * (i - unused.size() / 2)} })
-				      .attr("r", function(d) { return d.r * .75; })
-				      .attr("stroke-width", 2);
+					  .attr("fill", "white")
+					  .attr('cx', function(d) { return d.cx; })
+					  .attr("cy", function(d) { return d.cy; });
 
 				target.transition()
-				      .attr("cx", width / 2)
-				      .attr("cy", height / 2)
-				      .attr("stroke-width", 4)
-				      .attr("r", hop.r);
+					  .attr("fill", "gray")
+					  .attr('cx', width / 2)
+					  .attr('cy', height / 2);
 
-				// Establish size of angle increments
-				var delta_theta = Math.PI * 2 / (hop.pairings.length / Math.min(hop.pairings.length, 10));
-				var max_jitter = Math.PI / 7;
-				var min_distance = 2 * hop.r + 20;
-				var max_distance = (Math.min(width - hop_attrs[0].r * 4, height) - 100) / 2;
-				
-				var thetas = [];
-				// log base 2 of all pairings
-				var log_distances = hop.pairings.map(function(d) {
-					var freq = hop.raw_pairings[d];
-					return Math.log(freq) / Math.log(3);
-				});
-
-				// now we can calculate the pct
-				var distances = log_distances.map(function(d){
-					if (log_distances[0] > 0) {
-						var dist = Math.max(max_distance - max_distance * d / log_distances[0], min_distance);
-						return dist;
-					} else {
-						return max_distance;
-					}
-				});
-
-				hop.pairings.reduce(function(previous, current, index) {
-					var theta = index % 16 * max_jitter + delta_theta + previous;
-					thetas.push(theta);
-					return theta;
-				}, 0);
-				
-				if (filter !== null) {
+				if (filter === null) {
 					used.transition()
-					    .attr("cx", function(d, i) {
-					    	return distances[i] * Math.cos(thetas[i]) + width / 2;
-					    })
-					    .attr("cy", function(d, i) {
-					    	var theta = thetas[i];
-					    	return distances[i] * Math.sin(thetas[i]) + height / 2;
-					    })
-					    .attr("r", function(d, i) { return d.r})
-					    .attr("stroke-width", 2);
-				} else {
-					// Reset circles to base position
-					used.transition()
-						.attr("cx", function(d) { return d.cx; })
-						.attr("cy", function(d) { return d.cy; })
-						.attr("r", function(d) { return d.r; })
-						.attr('stroke-width', 2);
+						.attr('cx', function(d) { return d.cx; })
+					    .attr("cy", function(d) { return d.cy; })
+					    .attr('fill', function(d) { return d.color; });
+					return;
 				}
+
+				// Determine theta for each hop
+				// Determine distance for each hop
+				function dist(d) {
+					return 20;
+				}
+
+				function theta(i, d) {
+					return Math.PI / 6 * i;
+				}
+
+				used.transition()
+				    .attr("cx", function(d, i) {
+				    	return Math.cos(theta(i, d)) * dist(d) + width / 2;
+				    })
+				    .attr("cy", function(d, i) {
+				    	return Math.sin(theta(i, d)) * dist(d) + height / 2;
+				    });
 
 			}
 
