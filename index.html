@@ -96,12 +96,10 @@
 				}
 
 				unused.transition()
-					  .attr("fill", "white")
-					  .attr('cx', function(d) { return d.cx; })
-					  .attr("cy", function(d) { return d.cy; });
+					  .attr('cx', function(d) { return -d.r; })
+					  .attr("cy", function(d) { return -d.r; });
 
 				target.transition()
-					  .attr("fill", "gray")
 					  .attr('cx', width / 2)
 					  .attr('cy', height / 2);
 
@@ -109,26 +107,59 @@
 					used.transition()
 						.attr('cx', function(d) { return d.cx; })
 					    .attr("cy", function(d) { return d.cy; })
-					    .attr('fill', function(d) { return d.color; });
 					return;
 				}
 
-				// Determine theta for each hop
+				// Retrieve paired hops
+				var paired_hops = hop_attrs.filter(function(d) { return hop.pairings.hasOwnProperty(d.name); });
+				// Sort by pairing freq
+				paired_hops = paired_hops.sort(function(a, b) { return hop.pairings[a.name] - hop.pairings[b.name]; });
+
+				var levels = {};
+				var level_vals = [];
+				// Get max freq
+				var maxfreq = 0;
+				// Get min freq
+				var minfreq = null;
+
+				paired_hops.map(function(d){
+					if (hop.pairings[d.name] > maxfreq) {
+						maxfreq = hop.pairings[d.name];
+					}
+					if (minfreq === null || hop.pairings[d.name] < minfreq) {
+						minfreq = hop.pairings[d.name];
+					}
+					var level = Math.ceil(Math.log(hop.pairings[d.name]));
+					if (!levels.hasOwnProperty(level)) {
+						levels[level] = [];
+						level_vals.push(level);
+					}
+					levels[level].push(d.name);
+					return {};
+				});
+				level_vals = level_vals.sort();
+				var maxdistance = Math.min(width / 2, height / 2);
+				var maxlog = Math.log(maxfreq);
 				// Determine distance for each hop
 				function dist(d) {
-					return 20;
+					var maxdist = maxdistance - hop.r - d.r;
+
+					return maxdist - (maxdist * Math.log(hop.pairings[d.name]) / maxlog) + hop.r + d.r;
 				}
 
-				function theta(i, d) {
-					return Math.PI / 6 * i;
+				// Determine theta for each hop
+				function theta(d) {
+					var level = Math.ceil(Math.log(hop.pairings[d.name]));
+					var index = levels[level].indexOf(d.name);
+					return 2 * Math.PI / levels[level].length * index + (2 * Math.PI / level_vals.length * level_vals.indexOf(level));
 				}
 
 				used.transition()
 				    .attr("cx", function(d, i) {
-				    	return Math.cos(theta(i, d)) * dist(d) + width / 2;
+				    	return Math.cos(theta(d)) * dist(d) + width / 2;
 				    })
 				    .attr("cy", function(d, i) {
-				    	return Math.sin(theta(i, d)) * dist(d) + height / 2;
+				    	return Math.sin(theta(d)) * dist(d) + height / 2;
 				    });
 
 			}
