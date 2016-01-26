@@ -6,20 +6,31 @@
 		<script type="text/javascript" src="lib/svg-pan-zoom.min.js"></script>
 		<style>
 			.styles {
-				float:left;
-			}
-			.hop-choice {
-				cursor: pointer;
+				float: left;
+				width:200px	;
 			}
 			.choose-hop>h3 {
 				display: inline-block;
 			}
 			.title {
-				display:inline-block;
+				display: inline-block;
 				margin-right: 1em;
 			}
 			.subtitle {
-				display:inline-block;
+				display: inline-block;
+			}
+			.details {
+				float: right;
+				width: 200px;
+				overflow-y: scroll;
+			}
+			.vizframe {
+			}
+			#viz {
+				float:left;
+			}
+			.hop {
+				cursor: pointer;
 			}
 		</style>
 	</head>
@@ -36,6 +47,14 @@
 				<h3>Styles</h3>
 			</div>
 			<svg id="viz"></svg>
+			<div class="details">
+				<h4 class="name"></h4>
+				<p class="notes"></p>
+				<h5>Styles</h5>
+				<svg class="stylechart"></svg>
+				<h5>Pairings</h5>
+				<svg class="pairchart"></svg>
+			</div>
 		</div>
 		<script>
 			function variance(l) {
@@ -104,6 +123,45 @@
 			
 			var filter = null;
 
+			function build_bar(root, data, width, height) {
+				root.attr("width", width)
+					.attr("height", height);
+				var key, count = 0, values = [], keys=[];
+				for (key in data) {
+					if (data.hasOwnProperty(key) === false) {
+						continue;
+					}
+					values.push(data[key]);
+					keys.push(key);
+					count += 1;
+				}
+
+				var x = d3.scale.linear()
+									 .domain([0, d3.max(values)])
+									 .range([0, width]);
+				var bar_height = height / count;
+				var bar = root.selectAll("g")
+							  .data(values)
+							  .enter()
+							  .append("g")
+							  .attr("transform", function(d, i) { return "translate(0," + i * bar_height + ")"; });
+				bar.append("rect")
+				   .attr("width", x)
+				   .attr("height", bar_height - 1);
+				bar.append('text')
+				   .attr("x", function(d) { return x(d) - 3; })
+				   .attr("y", bar_height / 2)
+				   .attr("dy", ".35em")
+				   .text(function(d) { return d; });
+				bar.append('text')
+				   .attr('x', 0)
+				   .attr('y', bar_height / 2)
+				   .attr('dy', ".35em")
+				   .text(function(d, i) { return keys[i]; });
+			}
+
+			build_bar(d3.select("body>.vizframe>.details>.pairchart"), hop_attrs[0].pairings, 200, 1000);
+
 			function filterhops(hop) {
 				var unused, unused, target;
 				
@@ -142,6 +200,7 @@
 					used.transition()
 						.attr('cx', function(d) { return d.cx; })
 					    .attr("cy", function(d) { return d.cy; })
+					    .attr("stroke-width", 2);
 					return;
 				}
 
@@ -199,11 +258,13 @@
 				    })
 				    .attr("cy", function(d, i) {
 				    	return Math.sin(theta(d)) * dist(d) + height / 2;
-				    });
+				    })
+				    .attr("stroke-width", 2);
 
 			}
 
-			var circle_attrs = circles.attr("cx", function(d) { return d.cx; })
+			var circle_attrs = circles.attr("class", "hop")
+									  .attr("cx", function(d) { return d.cx; })
 									  .attr("cy", function(d) { return d.cy; })
 									  .attr("r", function(d) { return d.r; })
 									  .attr("fill", function(d) { return d.color; })
