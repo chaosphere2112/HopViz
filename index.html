@@ -4,11 +4,33 @@
 		<script type="text/javascript" src="json/hops.json"></script>
 		<script type="text/javascript" src="lib/d3.min.js"></script>
 		<script type="text/javascript" src="lib/svg-pan-zoom.min.js"></script>
+		<style>
+			.styles {
+				float:left;
+			}
+			.hop-choice {
+				cursor: pointer;
+			}
+			.choose-hop>h3 {
+				display: inline-block;
+			}
+		</style>
 	</head>
 	<body>
-		<svg id="viz"></svg>
-		<div class="details">
-			<h2 id="hopname"></h2>
+		<div class="vizframe">
+			<h1 class="title">Homebrew Hops</h1>
+			<h2 class="subtitle">Hop pairings used by homebrewers around the world</h2>
+			<div class="choose-hop">
+				<h3>Select a Hop:</h3>
+				<select class="hoplist">
+					<option value="null">--</option>
+				</select>
+				<button class="reset">Reset</button>
+			</div>
+			<div class="styles">
+				<h3>Styles</h3>
+			</div>
+			<svg id="viz"></svg>
 		</div>
 		<script>
 			function variance(l) {
@@ -69,7 +91,7 @@
 				}
 			});
 
-			var svg = d3.select("body").select("svg").attr('width', width).attr("height", height);
+			var svg = d3.select("body>.vizframe>#viz").attr('width', width).attr("height", height);
 			var circles = svg.selectAll("circle")
 			   .data(hop_attrs)
 			   .enter()
@@ -79,13 +101,18 @@
 
 			function filterhops(hop) {
 				var unused, unused, target;
-
+				
+				if (filter !== null) {
+					target = circles.filter(function(el) { return el.name === filter.name});
+					target.attr("stroke-width", 2);
+				}
 				// Determine which hops to keep and which to shove off to the sides
-				if (filter === hop.name) {
+				if (hop === null || filter === hop.name) {
 					filter = null;
 					used = circles;
 					unused = d3.selectAll([]);
 					target = d3.selectAll([]);
+					hoplist.property("value", "null");
 				} else {
 					filter = hop.name;
 					unused = circles.filter(function(el) { return el.name !== hop.name && hop.pairings.hasOwnProperty(el.name) === false; });
@@ -93,15 +120,18 @@
 						return hop.pairings.hasOwnProperty(el.name);
 					});
 					target = circles.filter(function(el) { return el.name == hop.name; });
+					var alpha_obj = list_items.filter(function(el) { return el.name == hop.name; });
+					hoplist.property("value", alpha_obj.attr('value'));
 				}
 
 				unused.transition()
 					  .attr('cx', function(d) { return -d.r; })
-					  .attr("cy", function(d) { return -d.r; });
+					  .attr("cy", function(d) { return -d.r; })
 
 				target.transition()
 					  .attr('cx', width / 2)
-					  .attr('cy', height / 2);
+					  .attr('cy', height / 2)
+					  .attr('stroke-width', 3);
 
 				if (filter === null) {
 					used.transition()
@@ -122,6 +152,10 @@
 				// Get min freq
 				var minfreq = null;
 
+				function log_ish(v) {
+					return Math.max(Math.log(v), .01);
+				}
+
 				paired_hops.map(function(d){
 					if (hop.pairings[d.name] > maxfreq) {
 						maxfreq = hop.pairings[d.name];
@@ -129,7 +163,7 @@
 					if (minfreq === null || hop.pairings[d.name] < minfreq) {
 						minfreq = hop.pairings[d.name];
 					}
-					var level = Math.ceil(Math.log(hop.pairings[d.name]));
+					var level = Math.ceil(log_ish(hop.pairings[d.name]));
 					if (!levels.hasOwnProperty(level)) {
 						levels[level] = [];
 						level_vals.push(level);
@@ -139,17 +173,17 @@
 				});
 				level_vals = level_vals.sort();
 				var maxdistance = Math.min(width / 2, height / 2);
-				var maxlog = Math.log(maxfreq);
+				var maxlog = log_ish(maxfreq);
 				// Determine distance for each hop
 				function dist(d) {
 					var maxdist = maxdistance - hop.r - d.r;
 
-					return maxdist - (maxdist * Math.log(hop.pairings[d.name]) / maxlog) + hop.r + d.r;
+					return maxdist - (maxdist * log_ish(hop.pairings[d.name]) / maxlog) + hop.r + d.r;
 				}
 
 				// Determine theta for each hop
 				function theta(d) {
-					var level = Math.ceil(Math.log(hop.pairings[d.name]));
+					var level = Math.ceil(log_ish(hop.pairings[d.name]));
 					var index = levels[level].indexOf(d.name);
 					return 2 * Math.PI / levels[level].length * index + (2 * Math.PI / level_vals.length * level_vals.indexOf(level));
 				}
@@ -180,7 +214,25 @@
 									  .on("mouseout", function(d, i) {
 									  	d3.select(this).transition().attr("r", d.r);
 									  });
-			//svgPanZoom("#viz");
+			var alphahops = hop_attrs.concat().sort(function(a, b) { return a.name.localeCompare(b.name); });
+			var hoplist = d3.select("body>.vizframe>.choose-hop>.hoplist");
+			var list_items = hoplist.on("change", function(){
+										var ind = this.selectedIndex;
+										if (ind === 0) {
+											filterhops(null);
+										} else {
+									    	filterhops(alphahops[this.selectedIndex - 1]);
+									    }
+									})
+									.selectAll("li.hoption")
+									.data(alphahops)
+									.enter()
+									.append("option")
+									.attr("class", "hoption")
+									.text(function(d) { return d.name +" (" + d.count + ")"; })
+									.attr('value', function(d, i) { return i; });
+
+			d3.select("body>.vizframe>.choose-hop>.reset").on("click", function() { filterhops(null); });
 		</script>
 	</body>
 </html>
