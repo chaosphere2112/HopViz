@@ -45,6 +45,8 @@
 			</div>
 			<div class="styles">
 				<h3>Styles</h3>
+				<form id="style_checkboxes">
+				</form>
 			</div>
 			<svg id="viz"></svg>
 			<div class="details">
@@ -64,6 +66,70 @@
 				var l_mean = mean(l);
 				var square_diff = l.map(function(d) { return Math.pow(d - l_mean, 2); });
 				return mean(square_diff);
+			}
+
+			function map_obj(obj, func) {
+				var values = []
+				for (var key in obj) {
+					if (obj.hasOwnProperty(key) === false) {
+						continue;
+					}
+					values.push(func(obj[key], key));
+				}
+				return values;
+			}
+
+			// Used to determine which styles we're looking at and which we aren't
+			var styles = {
+				"Light Lager": true,
+				"Pilsner": true,
+				"European Amber Lager": true,
+				"Dark Lager": true,
+				"Bock": true,
+				"Light Hybrid Beer": true,
+				"Amber Hybrid Beer": true,
+				"English Pale Ale": true,
+				"Scottish and Irish Ale": true,
+				"American Ale": true,
+				"English Brown Ale": true,
+				"Porter": true,
+				"Stout": true,
+				"India Pale Ale": true,
+				"Wheat and Rye Beer": true,
+				"Belgian and French Ale": true,
+				"Sour Ale": true,
+				"Belgian Strong Ale": true,
+				"Strong Ale": true,
+				"Fruit Beer": true,
+				"Spice/Herb/Vegetable Beer": true,
+				"Smoke & Wood-Aged Beer": true,
+				"Specialty Beer": true
+			}
+
+			var stylelist = map_obj(styles, function(d, key) { return key; });
+
+			function active_styles(){
+				var active = [];
+				map_obj(styles, function(val, key) { if (val === true) { active.push(key); } });
+				return active;
+			}
+
+			function hop_pairings(hop) {
+				var styles = active_styles();
+				var style, pairs;
+				pairings = {}
+				for (var i = 0; i < styles.length; i++) {
+					style = styles[i];
+					pairs = hop.pairings[style];
+					map_obj(pairs, function (val, key) {
+						if (pairings.hasOwnProperty(key)) {
+							pairings[key] += val;
+						} else {
+							pairings[key] = val;
+						}
+					});
+				}
+				return pairings;
 			}
 
 			// Use as base space size
@@ -127,14 +193,12 @@
 				root.attr("width", width)
 					.attr("height", height);
 				var key, count = 0, values = [], keys=[];
-				for (key in data) {
-					if (data.hasOwnProperty(key) === false) {
-						continue;
-					}
-					values.push(data[key]);
+				
+				map_obj(data, function(val, key) {
+					values.push(val);
 					keys.push(key);
 					count += 1;
-				}
+				});
 
 				var x = d3.scale.linear()
 									 .domain([0, d3.max(values)])
@@ -160,10 +224,10 @@
 				   .text(function(d, i) { return keys[i]; });
 			}
 
-			build_bar(d3.select("body>.vizframe>.details>.pairchart"), hop_attrs[0].pairings, 200, 1000);
+			//build_bar(d3.select("body>.vizframe>.details>.pairchart"), hop_attrs[0].pairings, 200, 1000);
 
 			function filterhops(hop) {
-				var unused, unused, target;
+				var unused, unused, target, pairs;
 				
 				if (filter !== null) {
 					target = circles.filter(function(el) { return el.name === filter.name});
@@ -176,17 +240,18 @@
 					unused = d3.selectAll([]);
 					target = d3.selectAll([]);
 					hoplist.property("value", "null");
+					pairs = {};
 				} else {
 					filter = hop.name;
-					unused = circles.filter(function(el) { return el.name !== hop.name && hop.pairings.hasOwnProperty(el.name) === false; });
+					pairs = hop_pairings(hop);
+					unused = circles.filter(function(el) { return el.name !== hop.name && pairs.hasOwnProperty(el.name) === false; });
 					used = circles.filter(function(el) {
-						return hop.pairings.hasOwnProperty(el.name);
+						return pairs.hasOwnProperty(el.name);
 					});
 					target = circles.filter(function(el) { return el.name == hop.name; });
 					var alpha_obj = list_items.filter(function(el) { return el.name == hop.name; });
 					hoplist.property("value", alpha_obj.attr('value'));
 				}
-
 				unused.transition()
 					  .attr('cx', function(d) { return -d.r; })
 					  .attr("cy", function(d) { return -d.r; })
@@ -205,9 +270,11 @@
 				}
 
 				// Retrieve paired hops
-				var paired_hops = hop_attrs.filter(function(d) { return hop.pairings.hasOwnProperty(d.name); });
+				var paired_hops = hop_attrs.filter(function(d) { return pairs.hasOwnProperty(d.name); });
 				// Sort by pairing freq
-				paired_hops = paired_hops.sort(function(a, b) { return hop.pairings[a.name] - hop.pairings[b.name]; });
+				paired_hops = paired_hops.sort(function(a, b) { 
+					return pairs[a.name] - pairs[b.name];
+				});
 
 				var levels = {};
 				var level_vals = [];
@@ -221,13 +288,13 @@
 				}
 
 				paired_hops.map(function(d){
-					if (hop.pairings[d.name] > maxfreq) {
-						maxfreq = hop.pairings[d.name];
+					if (pairs[d.name] > maxfreq) {
+						maxfreq = pairs[d.name];
 					}
-					if (minfreq === null || hop.pairings[d.name] < minfreq) {
-						minfreq = hop.pairings[d.name];
+					if (minfreq === null || pairs[d.name] < minfreq) {
+						minfreq = pairs[d.name];
 					}
-					var level = Math.ceil(log_ish(hop.pairings[d.name]));
+					var level = Math.ceil(log_ish(pairs[d.name]));
 					if (!levels.hasOwnProperty(level)) {
 						levels[level] = [];
 						level_vals.push(level);
@@ -242,12 +309,12 @@
 				function dist(d) {
 					var maxdist = maxdistance - hop.r - d.r;
 
-					return maxdist - (maxdist * log_ish(hop.pairings[d.name]) / maxlog) + hop.r + d.r;
+					return maxdist - (maxdist * log_ish(pairs[d.name]) / maxlog) + hop.r + d.r;
 				}
 
 				// Determine theta for each hop
 				function theta(d) {
-					var level = Math.ceil(log_ish(hop.pairings[d.name]));
+					var level = Math.ceil(log_ish(pairs[d.name]));
 					var index = levels[level].indexOf(d.name);
 					return 2 * Math.PI / levels[level].length * index + (2 * Math.PI / level_vals.length * level_vals.indexOf(level));
 				}
@@ -297,6 +364,10 @@
 									.attr("class", "hoption")
 									.text(function(d) { return d.name +" (" + d.count + ")"; })
 									.attr('value', function(d, i) { return i; });
+
+			var style_divs = d3.select("body>.vizframe>.styles>#style_checkboxes").selectAll("div").data(stylelist).enter().append("div");
+			style_divs.append("input").attr("type", "checkbox").attr('data-style', function(d) { return d; }).attr("id", function(d, i) { return "style" + i; }).property('checked', function(d, i) { return styles[d]; }).on("change", function() { var style = this.dataset.style; styles[style] = this.checked; });
+			style_divs.append("label").attr("for", function(d, i) { return "style" + i; }).text(function(d) { return d; });
 
 			d3.select("body>.vizframe>.choose-hop>.reset").on("click", function() { filterhops(null); });
 		</script>
