@@ -222,15 +222,31 @@
 			}
 
 			var filter = null;
-
 			//build_bar(d3.select("body>.vizframe>.details>.pairchart"), hop_attrs[0].pairings, 200, 1000);
-
+			// Reset at every update()
+			var max_pairs = 0;
+			var pair_levels = {};
+	
 			function distance(d, i) {
+				var pairs = hop_pairings(filter);
+				var pair_count = pairs[d.name];
 
+				var maxdistance = Math.max(width / 2, height / 2) / 2 - r(d);
+
+				if (max_pairs == 0) {
+					max_pairs = 1;
+				}
+
+				var logpct = Math.log(pair_count) / Math.log(max_pairs)
+
+				return maxdistance - maxdistance * logpct + r(filter) + r(d);
 			}
 
 			function angle(d, i) {
-				
+				var pairs = hop_pairings(filter);
+				var pair_count = pairs[d.name];
+				var pair_level = Math.ceil(Math.log(pair_count));
+				return pair_levels[pair_level].indexOf(d.name) * 2 * Math.PI / pair_levels[pair_level].length;
 			}
 
 
@@ -250,7 +266,7 @@
 
 					var pairs = hop_pairings(filter);
 					if (pairs.hasOwnProperty(d.name)) {
-						return distance(d, i) * Math.cos(angle(d, i)) + width / 2 - r(filter);
+						return distance(d, i) * Math.cos(angle(d, i)) + width / 2;
 					} else {
 						return -1 * r(d);
 					}
@@ -274,7 +290,7 @@
 
 					var pairs = hop_pairings(filter);
 					if (pairs.hasOwnProperty(d.name)) {
-						return distance(d, i) * Math.sin(angle(d, i)) + height / 2 - r(filter);
+						return distance(d, i) * Math.sin(angle(d, i)) + height / 2;
 					} else {
 						return -1 * r(d);
 					}
@@ -309,10 +325,36 @@
 									.attr('value', function(d, i) { return i; });
 
 			function update() {
+				max_pairs = 0;
+				pair_levels = {};
+				
 				if (filter === null) {
 					hoplist.property("value", "null");
 				} else {
 					hoplist.property("value", alphahops.indexOf(filter));
+					// Gather useful info for distance/angle
+					map_obj(hop_pairings(filter), function(value, key) {
+						if (value > max_pairs) {
+							max_pairs = value;
+						}
+						var log = Math.ceil(Math.log(value));
+						if (pair_levels.hasOwnProperty(log)) {
+							pair_levels[log].push(key);
+						} else {
+							pair_levels[log] = [key];
+						}
+					});
+				}
+
+				// Update the sizemap
+				var maxcount = hops.reduce(function(value, hop ) {
+					return Math.max(hop_count(hop), value);
+				}, 0);
+				sizemap = [];
+				var pct = 0;
+				for (var i = 0; i <= maxcount; i++) {
+					pct = i / maxcount;
+					sizemap.push(minsize + (maxsize - minsize) * pct);
 				}
 
 				circles.transition()
