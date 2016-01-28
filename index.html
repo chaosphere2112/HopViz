@@ -59,6 +59,13 @@
 			</div>
 		</div>
 		<script>
+			// variable hops included from hops.json
+			// Use as base space size
+			var unit = 50;
+			var width = 800; height = 500;
+			var rows = Math.ceil(Math.sqrt(hops.length));
+			var cols = Math.ceil(hops.length / rows);
+
 			function variance(l) {
 				function mean(l) {
 					return l.reduce(function(previous, current) { return previous + current; }, 0) / l.length;
@@ -132,12 +139,29 @@
 				return pairings;
 			}
 
-			// Use as base space size
-			var unit = 50;
-			var width = 800; height = 500;
-			var hops = hop_data;
+			function hop_count(hop) {
+				var styles = active_styles();
+				var style, count = 0;
+				for (var i = 0; i < styles.length; i++) {
+					style = styles[i];
+					if (hop.count.hasOwnProperty(style)) {
+						count += hop.count[style];
+					}
+				}
+				return count;
+			}
 
-			hops.sort(function(a, b) { return b.count - a.count; });
+			function hop_by_name(hopname) {
+				return hops.filter(function(d) { return hopname === d.name; })[0];
+			}
+
+			function filtered_hops() {
+				var filtered = hops.filter(function(d) { return hop_count(d) > 0; });
+				return filtered;
+			}
+			
+
+			hops.sort(function(a, b) { return hop_count(b) - hop_count(a); });
 
 			var colormap = []
 			var hue = 136, sat = 100, light = 42;
@@ -147,47 +171,20 @@
 			var minsize = unit / 4, maxsize = unit / 2;
 			var sizemap = [];
 			// Use the max count as the upper end of the colormap
-			for (var i = 0; i <= hops[0].count; i++) {
-				pct = i / hops[0].count;
+			for (var i = 0; i <= hop_count(hops[0]); i++) {
+				pct = i / hop_count(hops[0]);
 				tmpsat = minsat + (sat - minsat) * pct;
 				tmplight = maxlight - (maxlight - light) * pct;
 				colormap.push("hsl(" + hue + ", " + tmpsat + "%, " + tmplight + "%)");
 				sizemap.push(minsize + (maxsize - minsize) * pct);
 			}
 
-			// Determine cx, cy, r, and (eventually) color
-			var hop_attrs = hops.map(function(hop, index) {
-				var cx, cy, r;
-
-				r = unit / 2;
-				// Position is derived from index and pairings
-				var num_cols = width / unit;
-				var num_rows = height / unit;
-
-				var col = index % num_cols;
-				var row = Math.floor(index / num_cols);
-
-				cx = col * unit + r;
-				cy = row * unit + r;
-
-				return {
-					"name": hop.name,
-					"pairings": hop.pairings,
-					"count": hop.count,
-					"cx": cx,
-					"cy": cy,
-					"r": sizemap[hop.count],
-					"color": colormap[hop.count]
-				}
-			});
-
 			var svg = d3.select("body>.vizframe>#viz").attr('width', width).attr("height", height);
 			var circles = svg.selectAll("circle")
-			   .data(hop_attrs)
-			   .enter()
-			   .append("circle");
+								.data(hops)
+								.enter()
+								.append("circle");
 			
-			var filter = null;
 
 			function build_bar(root, data, width, height) {
 				root.attr("width", width)
@@ -210,163 +207,169 @@
 							  .append("g")
 							  .attr("transform", function(d, i) { return "translate(0," + i * bar_height + ")"; });
 				bar.append("rect")
-				   .attr("width", x)
-				   .attr("height", bar_height - 1);
+					.attr("width", x)
+					.attr("height", bar_height - 1);
 				bar.append('text')
-				   .attr("x", function(d) { return x(d) - 3; })
-				   .attr("y", bar_height / 2)
-				   .attr("dy", ".35em")
-				   .text(function(d) { return d; });
+					.attr("x", function(d) { return x(d) - 3; })
+					.attr("y", bar_height / 2)
+					.attr("dy", ".35em")
+					.text(function(d) { return d; });
 				bar.append('text')
-				   .attr('x', 0)
-				   .attr('y', bar_height / 2)
-				   .attr('dy', ".35em")
-				   .text(function(d, i) { return keys[i]; });
+					.attr('x', 0)
+					.attr('y', bar_height / 2)
+					.attr('dy', ".35em")
+					.text(function(d, i) { return keys[i]; });
 			}
+
+			var filter = null;
 
 			//build_bar(d3.select("body>.vizframe>.details>.pairchart"), hop_attrs[0].pairings, 200, 1000);
 
-			function filterhops(hop) {
-				var unused, unused, target, pairs;
-				
-				if (filter !== null) {
-					target = circles.filter(function(el) { return el.name === filter.name});
-					target.attr("stroke-width", 2);
-				}
-				// Determine which hops to keep and which to shove off to the sides
-				if (hop === null || filter === hop.name) {
-					filter = null;
-					used = circles;
-					unused = d3.selectAll([]);
-					target = d3.selectAll([]);
-					hoplist.property("value", "null");
-					pairs = {};
-				} else {
-					filter = hop.name;
-					pairs = hop_pairings(hop);
-					unused = circles.filter(function(el) { return el.name !== hop.name && pairs.hasOwnProperty(el.name) === false; });
-					used = circles.filter(function(el) {
-						return pairs.hasOwnProperty(el.name);
-					});
-					target = circles.filter(function(el) { return el.name == hop.name; });
-					var alpha_obj = list_items.filter(function(el) { return el.name == hop.name; });
-					hoplist.property("value", alpha_obj.attr('value'));
-				}
-				unused.transition()
-					  .attr('cx', function(d) { return -d.r; })
-					  .attr("cy", function(d) { return -d.r; })
-
-				target.transition()
-					  .attr('cx', width / 2)
-					  .attr('cy', height / 2)
-					  .attr('stroke-width', 3);
-
-				if (filter === null) {
-					used.transition()
-						.attr('cx', function(d) { return d.cx; })
-					    .attr("cy", function(d) { return d.cy; })
-					    .attr("stroke-width", 2);
-					return;
-				}
-
-				// Retrieve paired hops
-				var paired_hops = hop_attrs.filter(function(d) { return pairs.hasOwnProperty(d.name); });
-				// Sort by pairing freq
-				paired_hops = paired_hops.sort(function(a, b) { 
-					return pairs[a.name] - pairs[b.name];
-				});
-
-				var levels = {};
-				var level_vals = [];
-				// Get max freq
-				var maxfreq = 0;
-				// Get min freq
-				var minfreq = null;
-
-				function log_ish(v) {
-					return Math.max(Math.log(v), .01);
-				}
-
-				paired_hops.map(function(d){
-					if (pairs[d.name] > maxfreq) {
-						maxfreq = pairs[d.name];
-					}
-					if (minfreq === null || pairs[d.name] < minfreq) {
-						minfreq = pairs[d.name];
-					}
-					var level = Math.ceil(log_ish(pairs[d.name]));
-					if (!levels.hasOwnProperty(level)) {
-						levels[level] = [];
-						level_vals.push(level);
-					}
-					levels[level].push(d.name);
-					return {};
-				});
-				level_vals = level_vals.sort();
-				var maxdistance = Math.min(width / 2, height / 2);
-				var maxlog = log_ish(maxfreq);
-				// Determine distance for each hop
-				function dist(d) {
-					var maxdist = maxdistance - hop.r - d.r;
-
-					return maxdist - (maxdist * log_ish(pairs[d.name]) / maxlog) + hop.r + d.r;
-				}
-
-				// Determine theta for each hop
-				function theta(d) {
-					var level = Math.ceil(log_ish(pairs[d.name]));
-					var index = levels[level].indexOf(d.name);
-					return 2 * Math.PI / levels[level].length * index + (2 * Math.PI / level_vals.length * level_vals.indexOf(level));
-				}
-
-				used.transition()
-				    .attr("cx", function(d, i) {
-				    	return Math.cos(theta(d)) * dist(d) + width / 2;
-				    })
-				    .attr("cy", function(d, i) {
-				    	return Math.sin(theta(d)) * dist(d) + height / 2;
-				    })
-				    .attr("stroke-width", 2);
+			function distance(d, i) {
 
 			}
 
-			var circle_attrs = circles.attr("class", "hop")
-									  .attr("cx", function(d) { return d.cx; })
-									  .attr("cy", function(d) { return d.cy; })
-									  .attr("r", function(d) { return d.r; })
-									  .attr("fill", function(d) { return d.color; })
-									  .attr('stroke', "#008523")
-									  .attr("stroke-width", 2)
-									  .on("click", function(d, i) {
-									  	filterhops(d);
-									  })
-									  .on("mouseover", function(d, i) {
-										d3.select(this).transition().attr("r", 1.1 * d.r);
-										d3.select("#hopname").text(d.name);
-									  })
-									  .on("mouseout", function(d, i) {
-									  	d3.select(this).transition().attr("r", d.r);
-									  });
-			var alphahops = hop_attrs.concat().sort(function(a, b) { return a.name.localeCompare(b.name); });
+			function angle(d, i) {
+				
+			}
+
+
+			function cx(d, i) {
+				if (filter === null) {
+					if (hop_count(d) > 0) {
+						// Display in rows across the canvas
+						return i % cols * Math.ceil(width / cols) + unit / 2;
+					} else {
+						// Hide offscreen
+						return -1 * r(d);
+					}
+				} else {
+					if (filter === d) {
+						return width / 2;
+					} 
+
+					var pairs = hop_pairings(filter);
+					if (pairs.hasOwnProperty(d.name)) {
+						return distance(d, i) * Math.cos(angle(d, i)) + width / 2 - r(filter);
+					} else {
+						return -1 * r(d);
+					}
+				}
+
+			}
+
+			function cy(d, i) {
+				if (filter === null) {
+					if (hop_count(d) > 0) {
+						// Display in rows across the canvas
+						return Math.floor(i / rows) * Math.ceil(height / rows) + unit / 2;
+					} else {
+						// Hide offscreen
+						return -1 * r(d);
+					}
+				} else {
+					if (filter === d) {
+						return height / 2;
+					}
+
+					var pairs = hop_pairings(filter);
+					if (pairs.hasOwnProperty(d.name)) {
+						return distance(d, i) * Math.sin(angle(d, i)) + height / 2 - r(filter);
+					} else {
+						return -1 * r(d);
+					}
+				}
+			}
+
+			function r(d) {
+				var count = hop_count(d);
+				if (count > 0) {
+					return sizemap[count];
+				} else {
+					return 1;
+				}
+			}
+
+			function stroke_width(d) {
+				if (filter === d) {
+					return 3;
+				} else {
+					return 2;
+				}
+			}
+
+			var alphahops = hops.concat().sort(function(a, b) { return a.name.localeCompare(b.name); });
 			var hoplist = d3.select("body>.vizframe>.choose-hop>.hoplist");
-			var list_items = hoplist.on("change", function(){
-										var ind = this.selectedIndex;
-										if (ind === 0) {
-											filterhops(null);
-										} else {
-									    	filterhops(alphahops[this.selectedIndex - 1]);
-									    }
-									})
-									.selectAll("li.hoption")
+			var list_items = hoplist.selectAll("li.hoption")
 									.data(alphahops)
 									.enter()
 									.append("option")
 									.attr("class", "hoption")
-									.text(function(d) { return d.name +" (" + d.count + ")"; })
+									.text(function(d) { return d.name +" (" + hop_count(d) + ")"; })
 									.attr('value', function(d, i) { return i; });
 
+			function update() {
+				if (filter === null) {
+					hoplist.property("value", "null");
+				} else {
+					hoplist.property("value", alphahops.indexOf(filter));
+				}
+
+				circles.transition()
+						.attr("cx", cx)
+						.attr("cy", cy)
+						.attr("r", r)
+						.attr("stroke-width", stroke_width);
+
+				list_items.text(function(d) { return d.name + " (" + hop_count(d) + ")"; });
+			}
+
+			hoplist.on("change", function(){
+				var ind = this.selectedIndex;
+				if (ind === 0) {
+					filter = null;
+				} else {
+					filter = alphahops[this.selectedIndex - 1];
+				}
+				update();
+			});
+
+			circles.attr("class", "hop")
+					.attr("data-name", function(d) { return d.name; })
+					.attr("cx", cx)
+					.attr("cy", cy)
+					.attr("r", r)
+					.attr("fill", "#009934")
+					.attr('stroke', "#008523")
+					.attr("stroke-width", stroke_width)
+					.on("click", function(d, i) {
+						if (filter === d) {
+							filter = null;
+						} else {
+							filter = d;
+						}
+						update();
+					})
+					.on("mouseover", function(d, i) {
+					d3.select(this).transition().attr("r", 1.1 * r(d));
+					d3.select("#hopname").text(d.name);
+					})
+					.on("mouseout", function(d, i) {
+						d3.select(this).transition().attr("r", r(d));
+					});
+
+
 			var style_divs = d3.select("body>.vizframe>.styles>#style_checkboxes").selectAll("div").data(stylelist).enter().append("div");
-			style_divs.append("input").attr("type", "checkbox").attr('data-style', function(d) { return d; }).attr("id", function(d, i) { return "style" + i; }).property('checked', function(d, i) { return styles[d]; }).on("change", function() { var style = this.dataset.style; styles[style] = this.checked; });
+			style_divs.append("input")
+						.attr("type", "checkbox")
+						.attr('data-style', function(d) { return d; })
+						.attr("id", function(d, i) { return "style" + i; })
+						.property('checked', function(d, i) { return styles[d]; })
+						.on("change", function() {
+							var style = this.dataset.style;
+							styles[style] = this.checked;
+							update();
+						});
 			style_divs.append("label").attr("for", function(d, i) { return "style" + i; }).text(function(d) { return d; });
 
 			d3.select("body>.vizframe>.choose-hop>.reset").on("click", function() { filterhops(null); });
