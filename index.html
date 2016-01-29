@@ -34,6 +34,9 @@
 			.hop {
 				cursor: pointer;
 			}
+			.bar {
+				fill: blue;
+			}
 		</style>
 	</head>
 	<body>
@@ -150,14 +153,13 @@
 
 			function hop_count(hop) {
 				var styles = active_styles();
-				var style, count = 0;
-				for (var i = 0; i < styles.length; i++) {
-					style = styles[i];
+				return styles.reduce(function(count, style) {
 					if (hop.count.hasOwnProperty(style)) {
-						count += hop.count[style];
+						return count + hop.count[style];
+					} else {
+						return count;
 					}
-				}
-				return count;
+				}, 0);
 			}
 
 			function hop_by_name(hopname) {
@@ -167,6 +169,26 @@
 			function filtered_hops() {
 				var filtered = hops.filter(function(d) { return hop_count(d) > 0; });
 				return filtered;
+			}
+
+			function style_counts(hop) {
+				var hops;
+				var styles = active_styles();
+				if (hop === null) {
+					hops = filtered_hops();
+				} else {
+					hops = [hop];
+				}
+				var counts = styles.map(function(style) {
+					return hops.reduce(function(val, hop){
+						if (hop.count.hasOwnProperty(style)) {
+							return val + hop.count[style];
+						} else {
+							return val;
+						}
+					}, 0);
+				});
+				return styles.reduce(function(obj, style, ind) { obj[style] = counts[ind]; return obj; }, {});
 			}
 			
 
@@ -275,6 +297,9 @@
 			function r(d) {
 				var count = hop_count(d);
 				if (count > 0) {
+					if (count > sizemap.length - 1) {
+						return sizemap[sizemap.length - 1];
+					}
 					return sizemap[count];
 				} else {
 					return 1;
@@ -302,15 +327,19 @@
 									.attr("class", "hoption")
 									.text(function(d) { return d.name +" (" + hop_count(d) + ")"; })
 									.attr('value', function(d, i) { return i; });
-
 			function update() {
+
 				max_pairs = 0;
 				pair_levels = {};
+
+				styles_data = style_counts(filter);
+				build_bar(d3.select("body>.vizframe>.details>.stylechart"), styles_data, 300, 25);
 				
 				if (filter === null) {
 					hoplist.property("value", "null");
 					d3.select(".details>.name").text("");
 					d3.select(".details>.notes").text("");
+
 				} else {
 					hoplist.property("value", alphahops.indexOf(filter));
 					// Gather useful info for distance/angle
@@ -369,7 +398,11 @@
 								.on("mouseover", cancel_label_hide)
 								.on("mouseout", start_hide_label)
 								.on("click", function(d, i) {
-									filter = label_hovering;
+									if (filter === label_hovering) {
+										filter = null;
+									} else {
+										filter = label_hovering;
+									}
 									update();
 								});
 			var label_hovering = null;
@@ -389,9 +422,6 @@
 
 			circles.attr("class", "hop")
 					.attr("data-name", function(d) { return d.name; })
-					.attr("cx", cx)
-					.attr("cy", cy)
-					.attr("r", r)
 					.attr("fill", fill)
 					.attr('stroke', "#008523")
 					.attr("stroke-width", stroke_width)
@@ -413,7 +443,7 @@
 					});
 
 
-
+			update();
 
 			var style_divs = d3.select("body>.vizframe>.styles>#style_checkboxes").selectAll("div").data(stylelist).enter().append("div");
 			style_divs.append("input")
