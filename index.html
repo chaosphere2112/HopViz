@@ -210,9 +210,6 @@
 					}
 					max_pairs = 1.1;
 				}
-				if (Math.log(max_pairs) === 0) {
-					console.log("Distance is the offender")
-				}
 				var logpct = Math.log(pair_count) / Math.log(max_pairs)
 
 				return maxdistance - maxdistance * logpct + r(filter) + r(d);
@@ -222,9 +219,6 @@
 				var pairs = hop_pairings(filter);
 				var pair_count = pairs[d.name];
 				var pair_level = Math.ceil(Math.log(pair_count));
-				if (pair_levels[pair_level].length == 0) {
-					console.log("angle is the offender");
-				}
 				return pair_levels[pair_level].indexOf(d.name) * 2 * Math.PI / pair_levels[pair_level].length;
 			}
 
