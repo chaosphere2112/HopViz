@@ -51,7 +51,7 @@
 			<div class="choose-hop row">
 				<div class="form-group">
 					<label class="col-sm-2 control-label">Select a Hop:</label>
-					<div class="col-sm-8">
+					<div class="col-sm-3">
 						<select class="form-control hoplist">
 							<option value="null">--</option>
 						</select>
@@ -328,7 +328,7 @@
 			}
 
 			var alphahops = hops.concat().sort(function(a, b) { return a.name.localeCompare(b.name); });
-			var hoplist = d3.select("body>.vizframe>.choose-hop>.hoplist");
+			var hoplist = d3.select(".hoplist");
 			var list_items = hoplist.selectAll("li.hoption")
 									.data(alphahops)
 									.enter()
