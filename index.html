@@ -6,13 +6,15 @@
 		<script type="text/javascript" src="lib/svg-pan-zoom.min.js"></script>
 		<script type="text/javascript" src="scripts/bars.js"></script>
 		<script type="text/javascript" src="scripts/colors.js"></script>
+		<link rel="stylesheet" type="text/css" href="bootstrap/css/bootstrap.min.css">
+		<link rel="stylesheet" type="text/css" href="bootstrap/css/bootstrap-theme.min.css">
 		<style>
 			.styles {
 				float: left;
-				width:200px	;
+				width:200px;
 			}
-			.choose-hop>h3 {
-				display: inline-block;
+			.choose-hop {
+				margin-bottom: 1em;
 			}
 			.title {
 				display: inline-block;
@@ -39,19 +41,25 @@
 				stroke-width: 2;
 				stroke: #3c6cdd;
 			}
+			#style_checkboxes label {
+				font-weight: normal;
+			}
 		</style>
 	</head>
 	<body>
-		<div class="vizframe">
-			<div class="choose-hop">
-				<h3>Select a Hop:</h3>
-				<select class="hoplist">
-					<option value="null">--</option>
-				</select>
-				<button class="reset">Reset</button>
+		<div class="vizframe container">
+			<div class="choose-hop row">
+				<div class="form-group">
+					<label class="col-sm-2 control-label">Select a Hop:</label>
+					<div class="col-sm-8">
+						<select class="form-control hoplist">
+							<option value="null">--</option>
+						</select>
+					</div>
+				</div>
 			</div>
 			<div class="styles">
-				<h3>Styles</h3>
+				<h4>Styles</h4>
 				<form id="style_checkboxes">
 				</form>
 			</div>
@@ -60,23 +68,22 @@
 				<text id="hoverlabel" x="-100" y="-100"></text>
 			</svg>
 			<div class="details">
-				<h4 class="name"></h4>
+				<h3 class="name"></h3>
 				<p class="notes"></p>
-				<h5>Style Distribution</h5>
+				<h4>Style Distribution</h4>
 				<svg class="stylechart"></svg>
-				<h5>Pairings</h5>
-				<svg class="pairchart"></svg>
+				<!--<h5>Pairings</h5>
+				<svg class="pairchart"></svg>-->
 			</div>
 		</div>
 		<script>
 
 			//todo: group styles and have "check all" / "uncheck all"
-			//todo: details section
 
 			// variable hops included from hops.json
 			// Use as base space size
 			var unit = 50;
-			var width = 800; height = 500;
+			var width = 700; height = 500;
 			var rows = Math.ceil(Math.sqrt(hops.length));
 			var cols = Math.ceil(hops.length / rows);
 
@@ -447,19 +454,24 @@
 
 			update();
 
-			var style_divs = d3.select("body>.vizframe>.styles>#style_checkboxes").selectAll("div").data(stylelist).enter().append("div");
-			style_divs.append("input")
-						.attr("type", "checkbox")
-						.attr('data-style', function(d) { return d; })
-						.attr("id", function(d, i) { return "style" + i; })
-						.property('checked', function(d, i) { return styles[d]; })
-						.on("change", function() {
-							var style = this.dataset.style;
-							styles[style] = this.checked;
-							update();
-						});
-			style_divs.append("label").attr("for", function(d, i) { return "style" + i; }).text(function(d) { return d; });
+			var style_divs = d3.select("body>.vizframe>.styles>#style_checkboxes").selectAll("div").data(stylelist).enter().append("div").attr("class", "checkbox");
+			var label = style_divs.append("label")
+									.html(function(d, i) {
+										if (styles[d]) {
+											return "<input type='checkbox' data-style='" + d + "' checked id='style" + i + "' > " + d;
+										} else {
+											return "<input type='checkbox' data-style='" + d + "' id='style" + i + "' > " + d;
+										}
+									});
+			var checks = document.querySelectorAll("input[type='checkbox']");
 
+			for (var ind = 0; ind < checks.length; ind++) {
+				checks[ind].onchange = function() {
+						var style = this.dataset.style;
+						styles[style] = this.checked;
+						update();
+					};
+			}
 			d3.select("body>.vizframe>.choose-hop>.reset").on("click", function() { filterhops(null); });
 		</script>
 	</body>
