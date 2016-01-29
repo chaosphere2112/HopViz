@@ -14,6 +14,7 @@
 				width:200px;
 			}
 			.choose-hop {
+				margin-top: 1em;
 				margin-bottom: 1em;
 			}
 			.title {
@@ -48,9 +49,17 @@
 	</head>
 	<body>
 		<div class="vizframe container">
+			<div class="row">
+				<h1>Homebrew Hop Usage</h1>
+				<p>This visualization is a look at how home (beer) brewers use different hops together. It uses data that is part of an ongoing project of mine to gather, parse, structure, and eventually analyze recipes, ingredients, flavors, and a host of other attributes.</p>
+				<p>This data is gathered from two sources; the hop names (as well as the "notes" and a large pile of other metadata) was scraped off of <a href='http://hopunion.com/'>HopUnion.com</a>, a retailer of hops to professional and home brewers, and the recipes came from <a href="http://www.homebrewtalk.com/">HomeBrewTalk</a>, a forum where home brewers gather and share recipes and discuss brewing techniques. I used BeautifulSoup and Requests to fetch and parse the HTML, and a variety of scraping techniques (pattern matching HTML attributes to determine what parts of the page map to what columns in my database, some smattering of NLP, and a custom trie implementation for hunting for specific strings with errors) to actually extract the data from the pages.</p>
+				<p>The circles in the visualization below each represent one hop from my dataset. The size of the hop indicates the frequency with which that hop was used. The color of the hops has no particular meaning, besides as an aid to keeping track of specfic hops. If you click on a hop, it will shift to the center of the canvas, and all of the hops that have been used with it will distribute themselves around it. The distance of each hop from the center hop indicates how frequently those two hops are used together. The angle is only used to declutter the display and prevent data from overlapping as much as possible.</p>
+				<p>Above the visualization, you can select which hop to focus on from a drop down menu. To the left, there is a list of beer style categories (as defined by the Beer Judge Certification Program) that you can use to filter the data further; if you don't care about Lager styles, for example, you can uncheck those and the visualization will adjust after filtering out the data for those styles.</p>
+				<p>On the right side, there's a histogram of the current styles. It gives a general sense of the distribution of hops to styles. If you focus on a specific hop, the histogram will adjust to show the styles that the current hop is used in.</p>
+			</div>
 			<div class="choose-hop row">
 				<div class="form-group">
-					<label class="col-sm-2 control-label">Select a Hop:</label>
+					<label class="col-sm-2 control-label" style="text-align: right;">Select a Hop:</label>
 					<div class="col-sm-3">
 						<select class="form-control hoplist">
 							<option value="null">--</option>
