@@ -27,7 +27,7 @@ function build_bar(root, data, width, row_height) {
 	bar.append("rect")
 		.attr("class", "bar")
 		.attr("width", x)
-		.attr("height", row_height - 1);
+		.attr("height", row_height - 4);
 	bar.append('text')
 		.attr("class", "bar_label")
 		.attr('x', 0)
