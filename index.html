@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<script type="text/javascript" src="json/hops.json"></script>
+		<script type="text/javascript" src="lib/d3.min.js"></script>
+		<script type="text/javascript" src="lib/svg-pan-zoom.min.js"></script>
+		<script type="text/javascript" src="scripts/bars.js"></script>
+		<script type="text/javascript" src="scripts/colors.js"></script>
+		<link rel="stylesheet" type="text/css" href="bootstrap/css/bootstrap.min.css">
+		<link rel="stylesheet" type="text/css" href="bootstrap/css/bootstrap-theme.min.css">
+		<style>
+			.styles {
+				float: left;
+				width:200px;
+			}
+			.choose-hop {
+				margin-top: 1em;
+				margin-bottom: 1em;
+			}
+			.title {
+				display: inline-block;
+				margin-right: 1em;
+			}
+			.subtitle {
+				display: inline-block;
+			}
+			.details {
+				float: right;
+				width: 200px;
+				overflow-y: scroll;
+			}
+			.vizframe {
+			}
+			#viz {
+				float:left;
+			}
+			.hop {
+				cursor: pointer;
+			}
+			.bar {
+				fill: #799ae7;
+				stroke-width: 2;
+				stroke: #3c6cdd;
+			}
+			#style_checkboxes label {
+				font-weight: normal;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="vizframe container">
+			<div class="row">
+				<h1>Homebrew Hop Usage</h1>
+				<p>This visualization is a look at how home (beer) brewers use different hops together. It uses data that is part of an ongoing project of mine to gather, parse, structure, and eventually analyze recipes, ingredients, flavors, and a host of other attributes.</p>
+				<p>This data is gathered from two sources; the hop names (as well as the "notes" and a large pile of other metadata) was scraped off of <a href='http://hopunion.com/'>HopUnion.com</a>, a retailer of hops to professional and home brewers, and the recipes came from <a href="http://www.homebrewtalk.com/">HomeBrewTalk</a>, a forum where home brewers gather and share recipes and discuss brewing techniques. I used BeautifulSoup and Requests to fetch and parse the HTML, and a variety of scraping techniques (pattern matching HTML attributes to determine what parts of the page map to what columns in my database, some smattering of NLP, and a custom trie implementation for hunting for specific strings with errors) to actually extract the data from the pages.</p>
+				<p>The circles in the visualization below each represent one hop from my dataset. The size of the hop indicates the frequency with which that hop was used. The color of the hops has no particular meaning, besides as an aid to keeping track of specfic hops. If you click on a hop, it will shift to the center of the canvas, and all of the hops that have been used with it will distribute themselves around it. The distance of each hop from the center hop indicates how frequently those two hops are used together. The angle is only used to declutter the display and prevent data from overlapping as much as possible.</p>
+				<p>Above the visualization, you can select which hop to focus on from a drop down menu. To the left, there is a list of beer style categories (as defined by the Beer Judge Certification Program) that you can use to filter the data further; if you don't care about Lager styles, for example, you can uncheck those and the visualization will adjust after filtering out the data for those styles.</p>
+				<p>On the right side, there's a histogram of the current styles. It gives a general sense of the distribution of hops to styles. If you focus on a specific hop, the histogram will adjust to show the styles that the current hop is used in.</p>
+			</div>
+			<div class="choose-hop row">
+				<div class="form-group">
+					<label class="col-sm-2 control-label" style="text-align: right;">Select a Hop:</label>
+					<div class="col-sm-3">
+						<select class="form-control hoplist">
+							<option value="null">--</option>
+						</select>
+					</div>
+				</div>
+			</div>
+			<div class="styles">
+				<h4>Styles</h4>
+				<form id="style_checkboxes">
+				</form>
+			</div>
+			<svg id="viz">
+				<g id="hop_group"></g>
+				<text id="hoverlabel" x="-100" y="-100"></text>
+			</svg>
+			<div class="details">
+				<h3 class="name"></h3>
+				<p class="notes"></p>
+				<h4>Style Distribution</h4>
+				<svg class="stylechart"></svg>
+				<!--<h5>Pairings</h5>
+				<svg class="pairchart"></svg>-->
+			</div>
+		</div>
+		<script>
+
+			//todo: group styles and have "check all" / "uncheck all"
+
+			// variable hops included from hops.json
+			// Use as base space size
+			var unit = 50;
+			var width = 700; height = 500;
+			var rows = Math.ceil(Math.sqrt(hops.length));
+			var cols = Math.ceil(hops.length / rows);
+
+			function variance(l) {
+				function mean(l) {
+					return l.reduce(function(previous, current) { return previous + current; }, 0) / l.length;
+				}
+				var l_mean = mean(l);
+				var square_diff = l.map(function(d) { return Math.pow(d - l_mean, 2); });
+				return mean(square_diff);
+			}
+
+			function map_obj(obj, func) {
+				var values = []
+				for (var key in obj) {
+					if (obj.hasOwnProperty(key) === false) {
+						continue;
+					}
+					values.push(func(obj[key], key));
+				}
+				return values;
+			}
+
+			// Used to determine which styles we're looking at and which we aren't
+			var styles = {
+				"Light Lager": true,
+				"Pilsner": true,
+				"European Amber Lager": true,
+				"Dark Lager": true,
+				"Bock": true,
+				"Light Hybrid Beer": true,
+				"Amber Hybrid Beer": true,
+				"English Pale Ale": true,
+				"Scottish and Irish Ale": true,
+				"American Ale": true,
+				"English Brown Ale": true,
+				"Porter": true,
+				"Stout": true,
+				"India Pale Ale": true,
+				"Wheat and Rye Beer": true,
+				"Belgian and French Ale": true,
+				"Sour Ale": true,
+				"Belgian Strong Ale": true,
+				"Strong Ale": true,
+				"Fruit Beer": true,
+				"Spice/Herb/Vegetable Beer": true,
+				"Smoke & Wood-Aged Beer": true,
+				"Specialty Beer": true
+			}
+
+			var stylelist = map_obj(styles, function(d, key) { return key; });
+
+			function active_styles(){
+				var active = [];
+				map_obj(styles, function(val, key) { if (val === true) { active.push(key); } });
+				return active;
+			}
+
+			function hop_pairings(hop) {
+				var styles = active_styles();
+				var style, pairs;
+				pairings = {}
+				for (var i = 0; i < styles.length; i++) {
+					style = styles[i];
+					pairs = hop.pairings[style];
+					map_obj(pairs, function (val, key) {
+						if (pairings.hasOwnProperty(key)) {
+							pairings[key] += val;
+						} else {
+							pairings[key] = val;
+						}
+					});
+				}
+				return pairings;
+			}
+
+			function hop_count(hop) {
+				var styles = active_styles();
+				return styles.reduce(function(count, style) {
+					if (hop.count.hasOwnProperty(style)) {
+						return count + hop.count[style];
+					} else {
+						return count;
+					}
+				}, 0);
+			}
+
+			function hop_by_name(hopname) {
+				return hops.filter(function(d) { return hopname === d.name; })[0];
+			}
+
+			function filtered_hops() {
+				var filtered = hops.filter(function(d) { return hop_count(d) > 0; });
+				return filtered;
+			}
+
+			function style_counts(hop) {
+				var hops;
+				var styles = active_styles();
+				if (hop === null) {
+					hops = filtered_hops();
+				} else {
+					hops = [hop];
+				}
+				var counts = styles.map(function(style) {
+					return hops.reduce(function(val, hop){
+						if (hop.count.hasOwnProperty(style)) {
+							return val + hop.count[style];
+						} else {
+							return val;
+						}
+					}, 0);
+				});
+				return styles.reduce(function(obj, style, ind) { obj[style] = counts[ind]; return obj; }, {});
+			}
+			
+
+			hops.sort(function(a, b) { return hop_count(b) - hop_count(a); });
+
+			var colormap = []
+			var hue = 136, sat = 100, light = 42;
+			var pct = 0;
+			var tmpsat, tmplight;
+			var minsat = 42, maxlight = 80;
+			var minsize = unit / 4, maxsize = unit / 2;
+			var sizemap = [];
+			// Use the max count as the upper end of the colormap
+			for (var i = 0; i <= hop_count(hops[0]); i++) {
+				pct = i / hop_count(hops[0]);
+				tmpsat = minsat + (sat - minsat) * pct;
+				tmplight = maxlight - (maxlight - light) * pct;
+				colormap.push("hsl(" + hue + ", " + tmpsat + "%, " + tmplight + "%)");
+				sizemap.push(minsize + (maxsize - minsize) * pct);
+			}
+
+			var svg = d3.select("body>.vizframe>#viz").attr('width', width).attr("height", height);
+			var circles = svg.select("#hop_group").selectAll("circle")
+								.data(hops)
+								.enter()
+								.append("circle");
+
+			var filter = null;
+			//build_bar(d3.select("body>.vizframe>.details>.pairchart"), hop_attrs[0].pairings, 200, 1000);
+			// Reset at every update()
+			var max_pairs = 0;
+			var pair_levels = {};
+	
+			function distance(d, i) {
+				var pairs = hop_pairings(filter);
+				var pair_count = pairs[d.name];
+
+				var maxdistance = Math.max(width / 2, height / 2) / 2 - r(d);
+
+				if (max_pairs == 0 || max_pairs == 1) {
+					if (pair_count == 1) {
+						pair_count = 1.1;
+					}
+					max_pairs = 1.1;
+				}
+				var logpct = Math.log(pair_count) / Math.log(max_pairs)
+
+				return maxdistance - maxdistance * logpct + r(filter) + r(d);
+			}
+
+			function angle(d, i) {
+				var pairs = hop_pairings(filter);
+				var pair_count = pairs[d.name];
+				var pair_level = Math.ceil(Math.log(pair_count));
+				return pair_levels[pair_level].indexOf(d.name) * 2 * Math.PI / pair_levels[pair_level].length;
+			}
+
+
+			function cx(d, i) {
+				if (filter === null) {
+					if (hop_count(d) > 0) {
+						// Display in rows across the canvas
+						return i % cols * Math.ceil(width / cols) + unit / 2;
+					} else {
+						// Hide offscreen
+						return -1 * r(d);
+					}
+				} else {
+					if (filter === d) {
+						return width / 2;
+					} 
+
+					var pairs = hop_pairings(filter);
+					if (pairs.hasOwnProperty(d.name)) {
+						return distance(d, i) * Math.cos(angle(d, i)) + width / 2;
+					} else {
+						return -1 * r(d);
+					}
+				}
+
+			}
+
+			function cy(d, i) {
+				if (filter === null) {
+					if (hop_count(d) > 0) {
+						// Display in rows across the canvas
+						return Math.floor(i / rows) * Math.ceil(height / rows) + unit / 2;
+					} else {
+						// Hide offscreen
+						return -1 * r(d);
+					}
+				} else {
+					if (filter === d) {
+						return height / 2;
+					}
+
+					var pairs = hop_pairings(filter);
+					if (pairs.hasOwnProperty(d.name)) {
+						return distance(d, i) * Math.sin(angle(d, i)) + height / 2;
+					} else {
+						return -1 * r(d);
+					}
+				}
+			}
+
+			function r(d) {
+				var count = hop_count(d);
+				if (count > 0) {
+					if (count > sizemap.length - 1) {
+						return sizemap[sizemap.length - 1];
+					}
+					return sizemap[count];
+				} else {
+					return 1;
+				}
+			}
+
+			function stroke_width(d) {
+				if (filter === d) {
+					return 4;
+				} else {
+					return 2;
+				}
+			}
+
+			function fill(d, i) {
+				return colors[i];
+			}
+
+			var alphahops = hops.concat().sort(function(a, b) { return a.name.localeCompare(b.name); });
+			var hoplist = d3.select(".hoplist");
+			var list_items = hoplist.selectAll("li.hoption")
+									.data(alphahops)
+									.enter()
+									.append("option")
+									.attr("class", "hoption")
+									.text(function(d) { return d.name +" (" + hop_count(d) + ")"; })
+									.attr('value', function(d, i) { return i; });
+			function update() {
+
+				max_pairs = 0;
+				pair_levels = {};
+
+				styles_data = style_counts(filter);
+				build_bar(d3.select("body>.vizframe>.details>.stylechart"), styles_data, 300, 25);
+				
+				if (filter === null) {
+					hoplist.property("value", "null");
+					d3.select(".details>.name").text("");
+					d3.select(".details>.notes").text("");
+
+				} else {
+					hoplist.property("value", alphahops.indexOf(filter));
+					// Gather useful info for distance/angle
+					map_obj(hop_pairings(filter), function(value, key) {
+						if (value > max_pairs) {
+							max_pairs = value;
+						}
+						var log = Math.ceil(Math.log(value));
+						if (pair_levels.hasOwnProperty(log)) {
+							pair_levels[log].push(key);
+						} else {
+							pair_levels[log] = [key];
+						}
+					});
+
+					d3.select(".details>.name").text(filter.name);
+					d3.select(".details>.notes").text(filter.notes);
+
+				}
+
+				// Update the sizemap
+				var maxcount = hops.reduce(function(value, hop ) {
+					return Math.max(hop_count(hop), value);
+				}, 0);
+				sizemap = [];
+				var pct = 0;
+				for (var i = 0; i <= maxcount; i++) {
+					pct = i / maxcount;
+					sizemap.push(minsize + (maxsize - minsize) * pct);
+				}
+
+				circles.transition()
+						.attr("cx", cx)
+						.attr("cy", cy)
+						.attr("r", r)
+						.attr("stroke-width", stroke_width);
+
+				list_items.text(function(d) { return d.name + " (" + hop_count(d) + ")"; });
+				if (filter !== null) {
+					hoverlabel.transition().attr('x', cx(filter, hops.indexOf(filter))).attr("y", cy(filter, hops.indexOf(filter)));
+				}
+			}
+
+			hoplist.on("change", function(){
+				var ind = this.selectedIndex;
+				if (ind === 0) {
+					filter = null;
+				} else {
+					filter = alphahops[this.selectedIndex - 1];
+				}
+				update();
+			});
+
+			var label_timer = null;
+			var hoverlabel = svg.select("#hoverlabel")
+								.on("mouseover", cancel_label_hide)
+								.on("mouseout", start_hide_label)
+								.on("click", function(d, i) {
+									if (filter === label_hovering) {
+										filter = null;
+									} else {
+										filter = label_hovering;
+									}
+									update();
+								});
+			var label_hovering = null;
+
+			function cancel_label_hide(){
+				if (label_timer !== null) {
+					window.clearTimeout(label_timer);
+					label_timer = null;
+				}
+			}
+			function start_hide_label() {
+				label_timer = window.setTimeout(function(){
+					hoverlabel.attr('x', -1000).attr('y', -1000);
+					label_hovering = null;
+				}, 300);
+			}
+
+			circles.attr("class", "hop")
+					.attr("data-name", function(d) { return d.name; })
+					.attr("fill", fill)
+					.attr('stroke', "#008523")
+					.attr("stroke-width", stroke_width)
+					.on("click", function(d, i) {
+						if (filter === d) {
+							filter = null;
+						} else {
+							filter = d;
+						}
+						update();
+					})
+					.on("mouseover", function(d, i) {
+						cancel_label_hide();
+						label_hovering = d;
+						svg.select("#hoverlabel").text(d.name).attr("x", cx(d, i)).attr("y", cy(d, i));
+					})
+					.on("mouseout", function(d, i) {
+						start_hide_label();
+					});
+
+
+			update();
+
+			var style_divs = d3.select("body>.vizframe>.styles>#style_checkboxes").selectAll("div").data(stylelist).enter().append("div").attr("class", "checkbox");
+			var label = style_divs.append("label")
+									.html(function(d, i) {
+										if (styles[d]) {
+											return "<input type='checkbox' data-style='" + d + "' checked id='style" + i + "' > " + d;
+										} else {
+											return "<input type='checkbox' data-style='" + d + "' id='style" + i + "' > " + d;
+										}
+									});
+			var checks = document.querySelectorAll("input[type='checkbox']");
+
+			for (var ind = 0; ind < checks.length; ind++) {
+				checks[ind].onchange = function() {
+						var style = this.dataset.style;
+						styles[style] = this.checked;
+						update();
+					};
+			}
+			d3.select("body>.vizframe>.choose-hop>.reset").on("click", function() { filterhops(null); });
+		</script>
+	</body>
+</html>
